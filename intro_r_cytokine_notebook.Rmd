@@ -89,8 +89,8 @@ Clinical variables such as cohort or sex are categorical. In R, we usually store
 ```{r factors}
 data <- data %>%
   mutate(
-    Cohort = factor(Cohort),
-    Sex    = factor(Sex)
+    Cohort = factor(Cohort, levels = c("Healthy Controls", "Disease Active", "Disease Remission")),
+    Sex    = factor(Sex, levels = c("Male", "Female"))
   )
 
 levels(data$Cohort)
