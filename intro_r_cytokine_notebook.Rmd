@@ -64,7 +64,9 @@ library(viridis)
 Make sure `sample_cytokine_data.xlsx` is in your working directory, or provide the full path.
 
 ```{r load-data}
-data <- read_excel("sample_cytokine_data.xlsx")
+data <- as.data.frame(read_excel("sample_cytokine_data.xlsx"))
+# set rownames 
+rownames(data) <- data[,1]
 
 # Take a quick look
 head(data)
