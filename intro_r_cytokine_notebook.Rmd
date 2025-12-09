@@ -1,0 +1,385 @@
+
+---
+title: "Intro to R & Data Visualisation for Immunology"
+author: "MSc Immunology Workshop"
+output: html_notebook
+---
+
+# Overview
+
+This notebook is a guided tutorial for MSc-level Immunology / Immunotherapeutics students
+who are encountering R and data visualisation for the first time.
+
+The goals are to:
+
+- Learn how to load data from Excel.
+- Understand basic R objects (vectors, data frames, factors).
+- Use **ggplot2** to make clear, reproducible figures.
+- Recreate common immunology-style figures:
+  - Histograms
+  - Boxplots with jittered points
+  - Scatterplots
+  - Contingency heatmaps
+  - Principal Component Analysis (PCA)
+  - Heatmaps
+  - Correlation matrices
+  - Linear models and forest plots
+
+The example dataset is a cytokine panel stored in:
+
+`sample_cytokine_data.xlsx`
+
+Each row is an individual. Each column is a variable (cytokines, cohort, sex, age).
+
+
+# 0. Setup
+
+## 0.1 Install packages (run once)
+
+```{r install-packages, eval=FALSE}
+install.packages(c(
+  "tidyverse",
+  "readxl",
+  "pheatmap",
+  "broom",
+  "viridis"
+))
+```
+
+## 0.2 Load packages (run every session)
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(pheatmap)
+library(broom)
+library(viridis)
+```
+
+
+# 1. Loading and inspecting the data
+
+## 1.1 Read the Excel file
+
+Make sure `sample_cytokine_data.xlsx` is in your working directory, or provide the full path.
+
+```{r load-data}
+data <- read_excel("sample_cytokine_data.xlsx")
+
+# Take a quick look
+head(data)
+str(data)
+```
+
+**Questions to ask at this stage:**
+
+- How many rows (samples) are there?
+- How many columns (variables) are there?
+- Which variables are numeric?
+- Which variables are categorical?
+
+
+## 1.2 Convert categorical variables to factors
+
+Clinical variables such as cohort or sex are categorical. In R, we usually store these as
+*factors*.
+
+```{r factors}
+data <- data %>%
+  mutate(
+    Cohort = factor(Cohort),
+    Sex    = factor(Sex)
+  )
+
+levels(data$Cohort)
+levels(data$Sex)
+```
+
+
+# 2. Core R data structures
+
+## 2.1 Vectors
+
+A **vector** is a one-dimensional collection of values of the same type.
+
+```{r vectors}
+ages <- c(53.8, 59.8, 79.2, 46.7)
+
+ages
+length(ages)
+mean(ages)
+summary(ages)
+```
+
+Vectors are the basic building blocks for most R objects.
+
+
+## 2.2 Data frames (and tibbles)
+
+A **data frame** is a table where each column is a vector and each row is an observation.
+
+```{r data-frames}
+mini_df <- tibble(
+  Age    = ages,
+  Cohort = c("Remission", "Active", "Remission", "Remission")
+)
+
+mini_df
+str(mini_df)
+```
+
+Real immunology datasets are simply *larger* data frames with more rows and columns.
+
+
+# 3. Data visualisation with ggplot2
+
+Key idea: every ggplot has the same three ingredients
+
+1. **Data**: a data frame
+2. **Aesthetics** (`aes`): how variables map to x, y, colour, etc.
+3. **Geometries** (`geom_*`): how the data are drawn (points, lines, boxes, tiles, ...)
+
+
+## 3.1 Distribution of a single cytokine (histogram)
+
+**Biological question:**  
+What does the distribution of TNF look like across individuals?
+
+```{r hist-TNF, fig.height=4, fig.width=6}
+ggplot(data, aes(x = TNF)) +
+  geom_histogram(
+    bins = 30,
+    colour = "white",
+    fill   = "steelblue"
+  ) +
+  labs(
+    x = "TNF",
+    y = "Number of individuals",
+    title = "Distribution of TNF across individuals"
+  ) +
+  theme_minimal()
+```
+
+
+## 3.2 Group comparisons: TNF by Cohort
+
+**Biological question:**  
+Do TNF levels differ between clinical cohorts?
+
+```{r boxplot-TNF, fig.height=4, fig.width=7}
+ggplot(data, aes(x = Cohort, y = TNF, fill = Cohort)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.5) +
+  geom_point(
+    size = 2.5,
+    shape = 21,
+    colour = "black",
+    position = position_jitter(width = 0.15)
+  ) +
+  scale_fill_viridis_d(end = 0.85) +
+  labs(
+    x = "Clinical cohort",
+    y = "TNF",
+    title = "TNF by clinical cohort"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+## 3.3 Cytokine–cytokine relationships: IL-10 vs TNF
+
+**Biological question:**  
+Are IL-10 and TNF correlated across individuals?
+
+```{r scatter-IL10-TNF, fig.height=4, fig.width=6}
+ggplot(data, aes(x = `IL-10`, y = TNF, fill = Cohort)) +
+  geom_point(size = 3, shape = 21, colour = "black") +
+  scale_fill_viridis_d(end = 0.85) +
+  labs(
+    x = "IL-10",
+    y = "TNF",
+    title = "Relationship between IL-10 and TNF"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+
+## 3.4 Contingency tables: Cohort × Sex
+
+**Biological question:**  
+Is sex balanced across the different cohorts?
+
+```{r contingency-Cohort-Sex, fig.height=4, fig.width=6}
+ct <- data %>%
+  count(Cohort, Sex)
+
+ct
+
+ggplot(ct, aes(x = Sex, y = Cohort, fill = n)) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = n), size = 4) +
+  scale_fill_viridis_c(end = 0.9, name = "Count") +
+  labs(
+    x = "Sex",
+    y = "Cohort",
+    title = "Contingency table: Cohort × Sex"
+  ) +
+  theme_minimal()
+```
+
+
+# 4. Multivariate analysis
+
+## 4.1 Principal Component Analysis (PCA)
+
+PCA is a method to:
+- reduce dimensionality,
+- identify major axes of variation,
+- visualise structure in multivariate data.
+
+Here we run PCA on the cytokine panel:
+
+```{r pca-run}
+cytokines <- c("IL-2", "IL-6", "TNF", "IL-10")
+
+pca <- prcomp(
+  data %>% select(all_of(cytokines)),
+  center = TRUE,
+  scale. = TRUE
+)
+
+summary(pca)
+```
+
+Extract the percentage of variance explained by each principal component:
+
+```{r pca-var-explained}
+var_expl <- round((pca$sdev^2 / sum(pca$sdev^2)) * 100, 2)
+var_expl
+```
+
+Create a data frame for plotting and colour points by cohort:
+
+```{r pca-plot, fig.height=5, fig.width=7}
+pca_df <- as.data.frame(pca$x) %>%
+  mutate(Cohort = data$Cohort)
+
+ggplot(pca_df, aes(PC1, PC2, fill = Cohort)) +
+  geom_point(size = 3, shape = 21, colour = "black") +
+  scale_fill_viridis_d(end = 0.85) +
+  labs(
+    x = paste0("PC1 (", var_expl[1], "%)"),
+    y = paste0("PC2 (", var_expl[2], "%)"),
+    title = "PCA of cytokine panel"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+
+## 4.2 Heatmap of cytokine expression
+
+Heatmaps allow us to visualise patterns across samples and cytokines simultaneously.
+
+```{r heatmap-cytokines, fig.height=5, fig.width=7}
+cyto_mat <- data %>%
+  select(all_of(cytokines)) %>%
+  as.matrix() %>%
+  scale()  # scale each cytokine to mean 0, sd 1
+
+pheatmap(
+  cyto_mat,
+  show_colnames = FALSE,
+  clustering_method = "ward.D2",
+  main = "Heatmap of scaled cytokine expression"
+)
+```
+
+
+## 4.3 Cytokine correlation matrix
+
+**Biological question:**  
+Which cytokines tend to co-vary across individuals?
+
+```{r corr-matrix, fig.height=4, fig.width=5}
+cor_mat <- data %>%
+  select(all_of(cytokines)) %>%
+  cor(use = "pairwise.complete.obs")
+
+cor_mat
+
+pheatmap(
+  cor_mat,
+  display_numbers = TRUE,
+  main = "Correlation matrix of cytokines"
+)
+```
+
+
+# 5. Simple modelling
+
+## 5.1 Linear regression: TNF ~ Cohort + Age + Sex
+
+**Biological question:**  
+Does TNF associate with disease status after adjusting for age and sex?
+
+```{r lm-fit}
+lm_model <- lm(TNF ~ Cohort + scale(Age) + Sex, data = data)
+
+summary(lm_model)
+```
+
+
+## 5.2 Forest plot of effect sizes
+
+Forest plots emphasise **effect sizes** (and confidence intervals) rather than just p-values.
+
+```{r forest-plot, fig.height=4, fig.width=7}
+lm_tidy <- tidy(lm_model, conf.int = TRUE) %>%
+  filter(term != "(Intercept)")
+
+lm_tidy
+
+ggplot(lm_tidy, aes(x = estimate, y = term)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+  theme_minimal() +
+  labs(
+    x = "Effect size (estimate ± 95% CI)",
+    y = NULL,
+    title = "Linear regression: TNF ~ Cohort + Age + Sex"
+  )
+```
+
+
+## 5.3 Continuous associations: Age vs TNF
+
+```{r age-vs-TNF, fig.height=4, fig.width=6}
+ggplot(data, aes(x = Age, y = TNF, fill = Cohort)) +
+  geom_point(size = 3, shape = 21, colour = "black") +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    linetype = "dashed",
+    aes(group = Cohort, colour = Cohort)
+  ) +
+  scale_fill_viridis_d(end = 0.85) +
+  scale_colour_viridis_d(end = 0.85, guide = "none") +
+  labs(
+    x = "Age (years)",
+    y = "TNF",
+    title = "Association between age and TNF by cohort"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+
+# 6. Key takeaways
+
+- Every figure is an answer to a **specific question**.
+- Choose the plot that best communicates the biological message.
+- Keep your code and workflow reproducible so that analyses are transparent and sharable.
+
